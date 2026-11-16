@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>נוכחות וסטטיסטיקה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Rubik:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one narrow column, three tabs, colored attendance grid and ranked tables. Read only. */
+:root {
+  --bg: #f3f4f0; --surface: #ffffff; --ink: #17201b; --muted: #66716b; --line: #dde1da; --accent: #1d5c43;
+  --present: #1f7a4d; --late: #b7791f; --absent: #b3392f;
+  --present-bg: #dff1e6; --late-bg: #f8ead0; --absent-bg: #f7dcd9;
+  --font-display: "Rubik", "Heebo", system-ui, sans-serif; --font-body: "Heebo", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121714; --surface: #1b221e; --ink: #e8ede9; --muted: #94a099; --line: #2c3631; --accent: #5fbf93;
+    --present: #5fbf93; --late: #e0a94a; --absent: #e07a70;
+    --present-bg: #1d3a2c; --late-bg: #3d3018; --absent-bg: #43221f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121714; --surface: #1b221e; --ink: #e8ede9; --muted: #94a099; --line: #2c3631; --accent: #5fbf93;
+  --present: #5fbf93; --late: #e0a94a; --absent: #e07a70;
+  --present-bg: #1d3a2c; --late-bg: #3d3018; --absent-bg: #43221f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.45; }
+button, select { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 680px; margin: 0 auto; padding: 16px 16px 64px; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-display); font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-size: 18px; margin: 0; text-wrap: balance; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sub { color: var(--muted); font-size: 14px; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--line); padding: 4px; border-radius: 12px; }
+.tab { border: 0; background: transparent; padding: 10px 4px; border-radius: 9px; font-weight: 500; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.seg { display: grid; gap: 6px; padding: 12px; grid-template-columns: repeat(3, 1fr); }
+.seg.two { grid-template-columns: repeat(2, 1fr); }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
+.seg button { min-height: 40px; border: 1.5px solid var(--line); background: var(--bg); border-radius: 10px; font-weight: 500; font-size: 15px; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 700; }
+.pnav { display: grid; grid-template-columns: 44px 1fr 44px; gap: 8px; align-items: center; padding: 0 12px 12px; text-align: center; font-weight: 700; font-family: var(--font-display); font-size: 18px; }
+.navbtn { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; font-size: 20px; min-height: 40px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 12px 12px; text-align: center; }
+.tile { background: var(--bg); border-radius: 10px; padding: 10px 4px; }
+.tile b { display: block; font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.tile span { font-size: 12px; color: var(--muted); }
+.row { display: flex; align-items: center; gap: 8px; padding: 0 12px 12px; }
+.row select { min-height: 40px; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 4px 10px; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 8px; text-align: center; border-top: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; line-height: 1.2; }
+th small { display: block; color: var(--ink); font-weight: 700; }
+td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; position: sticky; right: 0; background: var(--surface); z-index: 1; min-width: 118px; white-space: normal; }
+.pct { font-weight: 700; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); min-width: 56px; overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--present); } .bar i.mid { background: var(--late); } .bar i.low { background: var(--absent); }
+.cell { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+.c-p { background: var(--present-bg); color: var(--present); } .c-l { background: var(--late-bg); color: var(--late); }
+.c-a { background: var(--absent-bg); color: var(--absent); } .c-x { background: var(--line); color: var(--muted); font-size: 11px; font-weight: 500; } .c-n { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; } .legend .cell { width: 22px; height: 22px; font-size: 12px; border-radius: 6px; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.rk { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: 8px; background: var(--line); font-weight: 700; }
+.rk.r1 { background: var(--late-bg); color: var(--late); } .rk.r2, .rk.r3 { background: var(--present-bg); color: var(--present); }
+.gamehead { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 12px; border: 0; background: transparent; text-align: right; }
+.gt { font-family: var(--font-display); font-weight: 700; font-size: 17px; } .gs { color: var(--muted); font-size: 13px; }
+.evhead, .evrow { display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; padding: 8px 12px; text-align: center; }
+.evhead { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); } .evrow { border-top: 1px solid var(--line); }
+.evhead span:first-child, .evrow span:first-child { text-align: right; } .evrow span:first-child { font-weight: 700; }
+.pbtn { border: 0; background: transparent; font-weight: 700; text-align: right; padding: 0; }
+.histrow { display: grid; grid-template-columns: 1fr repeat(3, 70px); gap: 6px; padding: 6px 12px; font-size: 14px; text-align: center; background: var(--bg); }
+.histrow span:first-child { text-align: right; color: var(--muted); }
+.foot { color: var(--muted); font-size: 12px; text-align: center; }
+.msg { padding: 14px; border-radius: 12px; background: var(--absent-bg); color: var(--absent); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="sub">טוען נתונים…</div></div>
+<script>
+(function () {
+  var DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+  var SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+  var MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var TESTS = [
+    { key: "m100", label: "100 מ׳", type: "time" },
+    { key: "m33", label: "33 מ׳", type: "time" },
+    { key: "jmp", label: "זינוקים", type: "count" }
+  ];
+  var data = null, loadError = "";
+  var tab = "sum", mode = "month", anchor = null, sortBy = "pct";
+  var gOpen = null, tSub = "players", resMode = "best", rankKey = "overall", openP = null;
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function iso(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function parse(s) { var p = s.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function fmt(s) { var p = s.split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
+  function fmtShort(s) { var p = s.split("-"); return Number(p[2]) + "/" + Number(p[1]); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function todayStr() { return iso(new Date()); }
+
+  function players(onlyLeague) {
+    return Object.keys(data.players).filter(function (id) {
+      var p = data.players[id];
+      return p.active !== false && (!onlyLeague || p.league !== false);
+    }).map(function (id) { return { id: id, name: data.players[id].name }; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name, "he"); });
+  }
+
+  /* ---------- attendance report ---------- */
+  function bounds() {
+    var a = parse(anchor);
+    if (mode === "week") {
+      var st = new Date(a.getFullYear(), a.getMonth(), a.getDate() - a.getDay());
+      var en = new Date(st.getFullYear(), st.getMonth(), st.getDate() + 6);
+      return { from: iso(st), to: iso(en), label: "שבוע " + fmtShort(iso(st)) + " – " + fmtShort(iso(en)) };
+    }
+    if (mode === "month") {
+      var f = new Date(a.getFullYear(), a.getMonth(), 1), l = new Date(a.getFullYear(), a.getMonth() + 1, 0);
+      return { from: iso(f), to: iso(l), label: MONTHS[a.getMonth()] + " " + a.getFullYear() };
+    }
+    return { from: "0000-00-00", to: "9999-99-99", label: "כל התקופה" };
+  }
+  function shift(dir) {
+    var a = parse(anchor);
+    if (mode === "week") a.setDate(a.getDate() + 7 * dir); else a.setMonth(a.getMonth() + dir, 1);
+    anchor = iso(a);
+  }
+  function hasMarks(s) { var r = s.records || {}; return Object.keys(r).some(function (k) { return r[k]; }); }
+  function report() {
+    var b = bounds(), t = todayStr();
+    var dates = Object.keys(data.sessions).filter(function (d) {
+      if (d < b.from || d > b.to || d > t) return false;
+      var s = data.sessions[d]; return s.cancelled || hasMarks(s);
+    }).sort();
+    var held = dates.filter(function (d) { return !data.sessions[d].cancelled; });
+    var act = players(false), ids = {}; act.forEach(function (p) { ids[p.id] = 1; });
+    var per = dates.map(function (d) {
+      var s = data.sessions[d], c = { p: 0, l: 0, a: 0 };
+      if (!s.cancelled) Object.keys(s.records || {}).forEach(function (pid) { var v = s.records[pid]; if (v && ids[pid]) c[v]++; });
+      return { date: d, cancelled: !!s.cancelled, p: c.p, l: c.l, a: c.a };
+    });
+    var att = 0, tot = 0;
+    var rows = act.map(function (p) {
+      var c = { p: 0, l: 0, a: 0 };
+      var cells = dates.map(function (d) {
+        var s = data.sessions[d]; if (s.cancelled) return "x";
+        var v = (s.records || {})[p.id]; if (v) { c[v]++; return v; } return "";
+      });
+      var n = c.p + c.l + c.a; att += c.p + c.l; tot += n;
+      return { id: p.id, name: p.name, n: n, cells: cells, pct: n ? Math.round(((c.p + c.l) / n) * 100) : null };
+    });
+    return { b: b, dates: dates, held: held, per: per, rows: rows,
+      teamPct: tot ? Math.round((att / tot) * 100) : null, avgPer: held.length ? Math.round((att / held.length) * 10) / 10 : null };
+  }
+  function cellHtml(c) {
+    if (c === "p") return '<span class="cell c-p" title="הגיע">✓</span>';
+    if (c === "l") return '<span class="cell c-l" title="איחר">~</span>';
+    if (c === "a") return '<span class="cell c-a" title="לא הגיע">✕</span>';
+    if (c === "x") return '<span class="cell c-x" title="האימון בוטל">בוטל</span>';
+    return '<span class="cell c-n" title="לא סומן">·</span>';
+  }
+  function segBtns(items, current, act, attr) {
+    return items.map(function (x) { return '<button data-act="' + act + '" data-v="' + x[0] + '" class="' + (current === x[0] ? 'on' : '') + '" aria-pressed="' + (current === x[0]) + '">' + x[1] + '</button>'; }).join('');
+  }
+  function viewReport() {
+    var d = report(), rows = d.rows.slice();
+    if (sortBy === "pct") rows.sort(function (x, y) {
+      var px = x.pct == null ? -1 : x.pct, py = y.pct == null ? -1 : y.pct;
+      return py - px || y.n - x.n || x.name.localeCompare(y.name, "he");
+    });
+    var h = '<div class="card"><div class="seg" role="group" aria-label="סוג דוח">' + segBtns([["week", "שבועי"], ["month", "חודשי"], ["all", "כל התקופה"]], mode, "mode") + '</div>';
+    h += mode === "all" ? '<div class="pnav" style="grid-template-columns:1fr">' + esc(d.b.label) + '</div>'
+      : '<div class="pnav"><button class="navbtn" data-act="next" aria-label="התקופה הבאה">›</button><div>' + esc(d.b.label) + '</div><button class="navbtn" data-act="prev" aria-label="התקופה הקודמת">‹</button></div>';
+    h += '<div class="tiles"><div class="tile"><b>' + d.held.length + '</b><span>אימונים</span></div>' +
+      '<div class="tile"><b>' + (d.teamPct == null ? '–' : d.teamPct + '%') + '</b><span>ממוצע קבוצתי</span></div>' +
+      '<div class="tile"><b>' + (d.avgPer == null ? '–' : d.avgPer) + '</b><span>מגיעים לאימון</span></div></div>';
+    if (!d.dates.length) return h + '<div class="empty">אין אימונים מסומנים בתקופה הזו.</div></div>';
+    h += '<div class="row"><label class="sub" for="sortby">סדר</label><select id="sortby"><option value="pct"' + (sortBy === 'pct' ? ' selected' : '') + '>לפי אחוז נוכחות</option><option value="name"' + (sortBy === 'name' ? ' selected' : '') + '>לפי שם</option></select></div>';
+    h += '<div class="tablewrap"><table><thead><tr><th class="name">שחקן</th><th>נוכחות</th>';
+    d.per.forEach(function (ps) { h += '<th>' + SHORT[parse(ps.date).getDay()] + ' ' + fmtShort(ps.date) + '<small>' + (ps.cancelled ? 'בוטל' : (ps.p + ps.l) + '/' + (ps.p + ps.l + ps.a)) + '</small></th>'; });
+    h += '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var cls = r.pct == null ? '' : r.pct >= 80 ? '' : r.pct >= 60 ? 'mid' : 'low';
+      h += '<tr><td class="name">' + esc(r.name) + '</td><td>' + (r.pct == null ? '–' : '<span class="pct">' + r.pct + '%</span><div class="bar"><i class="' + cls + '" style="width:' + r.pct + '%"></i></div>') + '</td>' +
+        r.cells.map(function (c) { return '<td>' + cellHtml(c) + '</td>'; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div><div class="legend"><span>' + cellHtml('p') + 'הגיע</span><span>' + cellHtml('l') + 'איחר</span><span>' + cellHtml('a') + 'לא הגיע</span><span>' + cellHtml('') + 'לא סומן</span></div>' +
+      '<div class="legend" style="border-top:0;padding-top:0">אחוז הנוכחות כולל איחורים, ונספר רק על אימונים שבהם השחקן סומן.</div></div>';
+  }
+
+  /* ---------- games ---------- */
+  function resultOf(g) { if (g.us == null || g.them == null) return ""; return g.us > g.them ? "ניצחון" : g.us < g.them ? "הפסד" : "תיקו"; }
+  function viewGames() {
+    var dates = Object.keys(data.games).sort().reverse();
+    if (!dates.length) return '<div class="card"><div class="empty">עוד אין משחקים.</div></div>';
+    var rows = {}, rec = { w: 0, d: 0, l: 0, gf: 0, ga: 0, n: 0 };
+    players(true).forEach(function (p) { rows[p.id] = { name: p.name, apps: 0, g: 0, r: 0 }; });
+    dates.forEach(function (d) {
+      var g = data.games[d], r = resultOf(g);
+      if (r) { rec.n++; rec.gf += g.us; rec.ga += g.them; if (r === "ניצחון") rec.w++; else if (r === "תיקו") rec.d++; else rec.l++; }
+      (g.played || []).forEach(function (pid) {
+        if (!data.players[pid]) return;
+        var row = rows[pid] || (rows[pid] = { name: data.players[pid].name, apps: 0, g: 0, r: 0 });
+        var e = (g.events || {})[pid] || {};
+        row.apps++; row.g += e.g || 0; row.r += e.r || 0;
+      });
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; })
+      .sort(function (a, b) { return b.apps - a.apps || b.g - a.g || a.name.localeCompare(b.name, "he"); });
+    var h = '<div class="card"><div style="padding:12px"><h2>סטטיסטיקה</h2><div class="sub">' + dates.length + ' משחקים' +
+      (rec.n ? ' · ' + rec.w + ' ניצחונות, ' + rec.d + ' תיקו, ' + rec.l + ' הפסדים · שערים: ' + rec.gf + ' בעד, ' + rec.ga + ' נגד' : '') + '</div></div>' +
+      '<div class="tablewrap"><table><thead><tr><th class="name">שחקן</th><th>שיחק</th><th>% מהמשחקים</th><th>שערים</th><th>הרחקות</th></tr></thead><tbody>';
+    list.forEach(function (r) {
+      h += '<tr><td class="name">' + esc(r.name) + '</td><td>' + r.apps + '/' + dates.length + '</td><td>' + Math.round((r.apps / dates.length) * 100) + '%</td><td>' + r.g + '</td><td>' + r.r + '</td></tr>';
+    });
+    h += '</tbody></table></div><div class="legend">הרחקה היא 18 שניות. שחקנים שאינם רשומים לליגה לא נכללים בטבלה.</div></div>';
+    dates.forEach(function (d) {
+      var g = data.games[d], open = gOpen === d, played = g.played || [];
+      var reds = 0; played.forEach(function (pid) { reds += (((g.events || {})[pid]) || {}).r || 0; });
+      var venue = g.venue === "away" ? " (חוץ)" : g.venue === "home" ? " (בית)" : "";
+      h += '<div class="card"><button class="gamehead" data-act="gopen" data-v="' + d + '" aria-expanded="' + open + '"><span><span class="gt">נגד ' + esc(g.opponent) + venue + '</span><br><span class="gs">יום ' + DAYS[parse(d).getDay()] + ' ' + fmt(d) +
+        (resultOf(g) ? ' · ' + resultOf(g) + ': אנחנו ' + g.us + ', הם ' + g.them : '') + ' · שיחקו ' + played.length + '</span></span><span class="sub">' + (open ? '▲' : '▼') + '</span></button>';
+      if (open) {
+        h += '<div class="evhead"><span>שחקן</span><span>שערים</span><span>הרחקות</span></div>';
+        played.map(function (pid) { return { id: pid, name: data.players[pid] ? data.players[pid].name : pid }; })
+          .sort(function (a, b) { return a.name.localeCompare(b.name, "he"); })
+          .forEach(function (p) { var e = (g.events || {})[p.id] || {}; h += '<div class="evrow"><span>' + esc(p.name) + '</span><span>' + (e.g || 0) + '</span><span>' + (e.r || 0) + '</span></div>'; });
+      }
+      h += '</div>';
+    });
+    return h;
+  }
+
+  /* ---------- fitness tests ---------- */
+  function testByKey(k) { return TESTS.filter(function (t) { return t.key === k; })[0]; }
+  function fmtTime(sec) {
+    if (sec >= 60) { var m = Math.floor(sec / 60), r = sec - m * 60; return m + ":" + (r < 10 ? "0" : "") + r.toFixed(2); }
+    return sec.toFixed(2);
+  }
+  function fmtVal(t, v) { return v == null ? "–" : (t.type === "time" ? fmtTime(v) : String(v)); }
+  function bestOf(pid) {
+    var out = {}, dates = Object.keys(data.fitness).sort();
+    TESTS.forEach(function (t) {
+      var val = null;
+      dates.forEach(function (d) {
+        var r = (((data.fitness[d].results || {})[pid]) || {})[t.key];
+        if (r == null) return;
+        if (resMode === "last") val = r; else if (val == null || (t.type === "time" ? r < val : r > val)) val = r;
+      });
+      out[t.key] = val;
+    });
+    return out;
+  }
+  function rankEvent(key) {
+    var t = testByKey(key);
+    var list = players(false).map(function (p) { return { id: p.id, name: p.name, val: bestOf(p.id)[key] }; }).filter(function (x) { return x.val != null; });
+    list.sort(function (a, b) { return (t.type === "time" ? a.val - b.val : b.val - a.val) || a.name.localeCompare(b.name, "he"); });
+    var prev = null, rank = 0;
+    list.forEach(function (x, i) { if (prev === null || x.val !== prev) { rank = i + 1; prev = x.val; } x.rank = rank; });
+    return list;
+  }
+  function rankOverall() {
+    var per = {};
+    TESTS.forEach(function (t) { rankEvent(t.key).forEach(function (x) { (per[x.id] || (per[x.id] = { name: x.name, ranks: {} })).ranks[t.key] = x.rank; }); });
+    var full = [], part = [];
+    Object.keys(per).forEach(function (id) {
+      var o = per[id]; o.sum = TESTS.reduce(function (a, t) { return a + (o.ranks[t.key] || 0); }, 0);
+      o.missing = TESTS.filter(function (t) { return o.ranks[t.key] == null; });
+      (o.missing.length ? part : full).push(o);
+    });
+    full.sort(function (a, b) { return a.sum - b.sum || a.name.localeCompare(b.name, "he"); });
+    var prev = null, rank = 0;
+    full.forEach(function (x, i) { if (prev === null || x.sum !== prev) { rank = i + 1; prev = x.sum; } x.rank = rank; });
+    part.sort(function (a, b) { return a.name.localeCompare(b.name, "he"); });
+    return { full: full, part: part };
+  }
+  function rk(n) { return '<span class="rk' + (n <= 3 ? ' r' + n : '') + '">' + n + '</span>'; }
+  function viewTests() {
+    var dates = Object.keys(data.fitness).sort();
+    var h = '<div class="card"><div class="seg two" role="group">' + segBtns([["players", "לפי שחקן"], ["rank", "דירוג"]], tSub, "tsub") + '</div></div>';
+    if (!dates.length) return h + '<div class="card"><div class="empty">עוד אין תוצאות בדיקות.</div></div>';
+    h += '<div class="card"><div class="seg two" role="group" aria-label="איזו תוצאה להציג">' + segBtns([["best", "התוצאה הטובה ביותר"], ["last", "התוצאה האחרונה"]], resMode, "tmode") + '</div>';
+    if (tSub === "players") {
+      h += '<div class="tablewrap"><table><thead><tr><th class="name">שחקן</th><th>100 מ׳</th><th>33 מ׳</th><th>זינוקים</th></tr></thead><tbody>';
+      players(false).forEach(function (p) {
+        var b = bestOf(p.id);
+        h += '<tr><td class="name"><button class="pbtn" data-act="tplayer" data-v="' + p.id + '" aria-expanded="' + (openP === p.id) + '">' + esc(p.name) + '</button></td>' + TESTS.map(function (t) { return '<td>' + fmtVal(t, b[t.key]) + '</td>'; }).join('') + '</tr>';
+        if (openP === p.id) h += '<tr><td colspan="4" style="padding:0;border-top:0">' + dates.slice().reverse().map(function (d) {
+          var r = ((data.fitness[d].results || {})[p.id]) || {};
+          return '<div class="histrow"><span>' + fmt(d) + '</span>' + TESTS.map(function (t) { return '<span>' + fmtVal(t, r[t.key]) + '</span>'; }).join('') + '</div>';
+        }).join('') + '</td></tr>';
+      });
+      return h + '</tbody></table></div><div class="legend">לחיצה על שם שחקן מציגה את כל התוצאות שלו לפי תאריך.</div></div>';
+    }
+    h += '<div class="seg four" style="padding-top:0" role="group" aria-label="מקצה">' + segBtns([["overall", "כל המקצים"], ["m100", "100 מ׳"], ["m33", "33 מ׳"], ["jmp", "זינוקים"]], rankKey, "tkey") + '</div>';
+    if (rankKey === "overall") {
+      var o = rankOverall();
+      if (!o.full.length && !o.part.length) return h + '<div class="empty">אין תוצאות.</div></div>';
+      h += '<div class="sub" style="padding:0 12px 8px">הדירוג הכללי הוא סכום המקומות בשלושת המקצים. סכום נמוך יותר טוב יותר.</div><div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>100 מ׳</th><th>33 מ׳</th><th>זינוקים</th><th>סכום</th></tr></thead><tbody>';
+      o.full.forEach(function (x) { h += '<tr><td>' + rk(x.rank) + '</td><td class="name">' + esc(x.name) + '</td>' + TESTS.map(function (t) { return '<td>' + x.ranks[t.key] + '</td>'; }).join('') + '<td class="pct">' + x.sum + '</td></tr>'; });
+      h += '</tbody></table></div>';
+      if (o.part.length) h += '<div class="legend">חסרה תוצאה, לא בדירוג הכללי: ' + o.part.map(function (x) { return esc(x.name); }).join(', ') + '</div>';
+      return h + '</div>';
+    }
+    var t = testByKey(rankKey), list = rankEvent(rankKey);
+    if (!list.length) return h + '<div class="empty">אין תוצאות במקצה הזה.</div></div>';
+    h += '<div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>' + (t.type === "time" ? "זמן" : "זינוקים") + '</th></tr></thead><tbody>';
+    list.forEach(function (x) { h += '<tr><td>' + rk(x.rank) + '</td><td class="name">' + esc(x.name) + '</td><td class="pct">' + fmtVal(t, x.val) + '</td></tr>'; });
+    return h + '</tbody></table></div></div>';
+  }
+
+  function render() {
+    var el = document.getElementById("app");
+    var h = '<div class="top"><h1>נוכחות וסטטיסטיקה</h1><span class="sub">צפייה בלבד' + (data ? ' · עודכן ' + fmt(data.updated) : '') + '</span></div>' +
+      '<div class="tabs" role="tablist">' + [["sum", "דוחות"], ["games", "משחקים"], ["tests", "בדיקות"]].map(function (t) {
+        return '<button class="tab" role="tab" data-act="tab" data-v="' + t[0] + '" aria-selected="' + (tab === t[0]) + '">' + t[1] + '</button>';
+      }).join('') + '</div>';
+    if (loadError) h += '<div class="msg">' + esc(loadError) + '</div>';
+    else if (!data) h += '<div class="sub">טוען נתונים…</div>';
+    else h += tab === "sum" ? viewReport() : tab === "games" ? viewGames() : viewTests();
+    el.innerHTML = h;
+  }
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-act]"); if (!b) return;
+    var act = b.getAttribute("data-act"), v = b.getAttribute("data-v");
+    if (act === "tab") tab = v; else if (act === "mode") { mode = v; anchor = latest(); }
+    else if (act === "prev") shift(-1); else if (act === "next") shift(1);
+    else if (act === "gopen") gOpen = gOpen === v ? null : v;
+    else if (act === "tsub") tSub = v; else if (act === "tmode") resMode = v; else if (act === "tkey") rankKey = v;
+    else if (act === "tplayer") openP = openP === v ? null : v;
+    render();
+  });
+  document.addEventListener("change", function (e) { if (e.target.id === "sortby") { sortBy = e.target.value; render(); } });
+
+  function latest() {
+    var ds = Object.keys(data.sessions).filter(function (d) { return hasMarks(data.sessions[d]); }).sort();
+    return ds.length ? ds[ds.length - 1] : todayStr();
+  }
+  render();
+  fetch("data.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) {
+    if (!r.ok) throw new Error(r.status); return r.json();
+  }).then(function (j) { data = j; anchor = latest(); render(); })
+    .catch(function () { loadError = "לא הצלחנו לטעון את הנתונים. רענן את הדף."; render(); });
+})();
+</script>
+</body>
+</html>
