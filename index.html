@@ -84,6 +84,32 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
 .keybar span { display: inline-flex; align-items: center; gap: 6px; }
 .keybar .cell { width: 22px; height: 22px; font-size: 12px; border-radius: 6px; }
 .keybar .keynote { flex-basis: 100%; }
+
+.gcard { padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.gt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag { font-family: var(--font-body); font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--muted); }
+.tag.next { background: var(--late-bg); color: var(--late); }
+.gline { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.scoreblk { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 92px; }
+.res { font-weight: 700; font-size: 13px; padding: 2px 12px; border-radius: 999px; }
+.res.win { background: var(--present-bg); color: var(--present); } .res.loss { background: var(--absent-bg); color: var(--absent); }
+.res.draw { background: var(--late-bg); color: var(--late); } .res.todo { background: var(--line); color: var(--muted); }
+.sc { display: flex; align-items: flex-end; gap: 8px; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.sc .n { font-size: 26px; font-weight: 700; line-height: 1; text-align: center; }
+.sc .l { display: block; font-size: 11px; font-weight: 500; color: var(--muted); font-family: var(--font-body); text-align: center; }
+.sc .dash { color: var(--muted); font-size: 20px; line-height: 1.1; }
+.more { grid-column: 1 / -1; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; min-height: 40px; font-weight: 500; }
+.detail { border-top: 1px solid var(--line); }
+.dnote { padding: 12px; color: var(--muted); font-size: 14px; }
+.cnt { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 6px; font-weight: 700; background: var(--present-bg); color: var(--present); }
+.cnt.red { background: var(--absent-bg); color: var(--absent); }
+.zero { color: var(--muted); }
+.filters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 12px 12px; }
+.filters button { min-height: 38px; border: 1.5px solid var(--line); background: var(--bg); border-radius: 10px; font-weight: 500; font-size: 14px; }
+.filters button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.rbar { height: 6px; border-radius: 3px; background: var(--line); min-width: 70px; overflow: hidden; margin-top: 4px; }
+.rbar i { display: block; height: 100%; background: var(--present); } .rbar i.warn { background: var(--late); } .rbar i.cool { background: var(--accent); }
+.rk.neutral { background: var(--line); color: var(--ink); }
 .foot { color: var(--muted); font-size: 12px; text-align: center; }
 .msg { padding: 14px; border-radius: 12px; background: var(--absent-bg); color: var(--absent); }
 </style>
@@ -206,45 +232,101 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
   }
 
   /* ---------- games ---------- */
+  var gSub = "list", gFilter = "all", gMore = {}, gRank = "goals";
   function resultOf(g) { if (g.us == null || g.them == null) return ""; return g.us > g.them ? "ניצחון" : g.us < g.them ? "הפסד" : "תיקו"; }
-  function viewGames() {
-    var dates = Object.keys(data.games).sort().reverse();
-    if (!dates.length) return '<div class="card"><div class="empty">עוד אין משחקים.</div></div>';
-    var rows = {}, rec = { w: 0, d: 0, l: 0, gf: 0, ga: 0, n: 0 };
-    players(true).forEach(function (p) { rows[p.id] = { name: p.name, apps: 0, g: 0, r: 0 }; });
-    dates.forEach(function (d) {
-      var g = data.games[d], r = resultOf(g);
-      if (r) { rec.n++; rec.gf += g.us; rec.ga += g.them; if (r === "ניצחון") rec.w++; else if (r === "תיקו") rec.d++; else rec.l++; }
+  function isDone(g) { return g.us != null && g.them != null; }
+  function daysUntil(d) { return Math.round((parse(d) - parse(todayStr())) / 86400000); }
+  function whenText(d) { var n = daysUntil(d); return n < 0 ? "ממתין לתוצאה" : n === 0 ? "היום" : n === 1 ? "מחר" : "בעוד " + n + " ימים"; }
+  function nameOf(pid) { return data.players[pid] ? data.players[pid].name : pid; }
+  function gameStats() {
+    var rows = {}, done = 0, gf = 0, ga = 0, w = 0, dr = 0, l = 0, goals = 0, reds = 0;
+    players(true).forEach(function (p) { rows[p.id] = { id: p.id, name: p.name, apps: 0, g: 0, r: 0 }; });
+    Object.keys(data.games).forEach(function (d) {
+      var g = data.games[d]; if (!isDone(g)) return;
+      done++; gf += g.us; ga += g.them;
+      var r = resultOf(g); if (r === "ניצחון") w++; else if (r === "תיקו") dr++; else l++;
       (g.played || []).forEach(function (pid) {
         if (!data.players[pid]) return;
-        var row = rows[pid] || (rows[pid] = { name: data.players[pid].name, apps: 0, g: 0, r: 0 });
+        var row = rows[pid] || (rows[pid] = { id: pid, name: nameOf(pid), apps: 0, g: 0, r: 0 });
         var e = (g.events || {})[pid] || {};
-        row.apps++; row.g += e.g || 0; row.r += e.r || 0;
+        row.apps++; row.g += e.g || 0; row.r += e.r || 0; goals += e.g || 0; reds += e.r || 0;
       });
     });
-    var list = Object.keys(rows).map(function (k) { return rows[k]; })
-      .sort(function (a, b) { return b.apps - a.apps || b.g - a.g || a.name.localeCompare(b.name, "he"); });
-    var h = '<div class="card"><div style="padding:12px"><h2>סטטיסטיקה</h2><div class="sub">' + dates.length + ' משחקים' +
-      (rec.n ? ' · ' + rec.w + ' ניצחונות, ' + rec.d + ' תיקו, ' + rec.l + ' הפסדים · שערים: ' + rec.gf + ' בעד, ' + rec.ga + ' נגד' : '') + '</div></div>' +
-      '<div class="tablewrap"><table><thead><tr><th class="name">שחקן</th><th>שיחק</th><th>% מהמשחקים</th><th>שערים</th><th>הרחקות</th></tr></thead><tbody>';
-    list.forEach(function (r) {
-      h += '<tr><td class="name">' + esc(r.name) + '</td><td>' + r.apps + '/' + dates.length + '</td><td>' + Math.round((r.apps / dates.length) * 100) + '%</td><td>' + r.g + '</td><td>' + r.r + '</td></tr>';
-    });
-    h += '</tbody></table></div><div class="legend">הרחקה היא 18 שניות. שחקנים שאינם רשומים לליגה לא נכללים בטבלה.</div></div>';
-    dates.forEach(function (d) {
-      var g = data.games[d], open = gOpen === d, played = g.played || [];
-      var reds = 0; played.forEach(function (pid) { reds += (((g.events || {})[pid]) || {}).r || 0; });
-      var venue = g.venue === "away" ? " (חוץ)" : g.venue === "home" ? " (בית)" : "";
-      h += '<div class="card"><button class="gamehead" data-act="gopen" data-v="' + d + '" aria-expanded="' + open + '"><span><span class="gt">נגד ' + esc(g.opponent) + venue + '</span><br><span class="gs">יום ' + DAYS[parse(d).getDay()] + ' ' + fmt(d) +
-        (resultOf(g) ? ' · ' + resultOf(g) + ': אנחנו ' + g.us + ', הם ' + g.them : '') + ' · שיחקו ' + played.length + '</span></span><span class="sub">' + (open ? '▲' : '▼') + '</span></button>';
-      if (open) {
-        h += '<div class="evhead"><span>שחקן</span><span>שערים</span><span>הרחקות</span></div>';
-        played.map(function (pid) { return { id: pid, name: data.players[pid] ? data.players[pid].name : pid }; })
-          .sort(function (a, b) { return a.name.localeCompare(b.name, "he"); })
-          .forEach(function (p) { var e = (g.events || {})[p.id] || {}; h += '<div class="evrow"><span>' + esc(p.name) + '</span><span>' + (e.g || 0) + '</span><span>' + (e.r || 0) + '</span></div>'; });
+    return { rows: Object.keys(rows).map(function (k) { return rows[k]; }), done: done, gf: gf, ga: ga, w: w, d: dr, l: l, goals: goals, reds: reds };
+  }
+  function gameCard(d, nextKey) {
+    var g = data.games[d], done = isDone(g), open = !!gMore[d], res = resultOf(g);
+    var venue = g.venue === "away" ? "חוץ" : g.venue === "home" ? "בית" : "";
+    var h = '<div class="card"><div class="gcard"><div><div class="gt"><h2>נגד ' + esc(g.opponent) + '</h2>' +
+      (venue ? '<span class="tag">' + venue + '</span>' : '') + (d === nextKey ? '<span class="tag next">המשחק הבא</span>' : '') + '</div>' +
+      '<div class="gline">יום ' + DAYS[parse(d).getDay()] + ' ' + fmt(d) + (g.time ? ' · ' + g.time : '') + '</div>' +
+      (g.place ? '<div class="gline">' + esc(g.place) + '</div>' : '') + '</div>' +
+      '<div class="scoreblk">' + (done
+        ? '<span class="res ' + (res === 'ניצחון' ? 'win' : res === 'הפסד' ? 'loss' : 'draw') + '">' + res + '</span>' +
+          '<div class="sc"><span><b class="n">' + g.us + '</b><span class="l">אנחנו</span></span><span class="dash">–</span><span><b class="n">' + g.them + '</b><span class="l">הם</span></span></div>'
+        : '<span class="res todo">טרם שוחק</span><div class="gline">' + whenText(d) + '</div>') + '</div>' +
+      '<button class="more" data-act="gmore" data-v="' + d + '" aria-expanded="' + open + '">מידע נוסף ' + (open ? '▲' : '▼') + '</button></div>';
+    if (open) {
+      h += '<div class="detail">';
+      if (!done) h += '<div class="dnote">המשחק עוד לא התקיים. אחרי המשחק יופיעו כאן התוצאה, השערים וההרחקות.</div>';
+      else {
+        var list = (g.played || []).map(function (pid) { var e = (g.events || {})[pid] || {}; return { name: nameOf(pid), g: e.g || 0, r: e.r || 0 }; })
+          .sort(function (a, b) { return b.g - a.g || b.r - a.r || a.name.localeCompare(b.name, "he"); });
+        if (!list.length) h += '<div class="dnote">עוד לא נרשם הרכב למשחק.</div>';
+        else {
+          h += '<div class="evhead"><span>שחקן</span><span>שערים</span><span>הרחקות</span></div>';
+          list.forEach(function (x) {
+            h += '<div class="evrow"><span>' + esc(x.name) + '</span><span>' + (x.g ? '<b class="cnt">' + x.g + '</b>' : '<span class="zero">–</span>') + '</span><span>' + (x.r ? '<b class="cnt red">' + x.r + '</b>' : '<span class="zero">–</span>') + '</span></div>';
+          });
+        }
       }
       h += '</div>';
+    }
+    return h + '</div>';
+  }
+  function viewGames() {
+    var h = '<div class="card"><div class="seg two" role="group">' + segBtns([["list", "משחקים"], ["rank", "דירוגים"]], gSub, "gsub") + '</div></div>';
+    if (gSub === "rank") return h + viewRank();
+    var keys = Object.keys(data.games).sort();
+    if (!keys.length) return h + '<div class="card"><div class="empty">עוד אין משחקים.</div></div>';
+    var st = gameStats(), nextKey = keys.filter(function (k) { return !isDone(data.games[k]) && daysUntil(k) >= 0; })[0];
+    var nDone = keys.filter(function (k) { return isDone(data.games[k]); }).length, nNext = keys.length - nDone;
+    h += '<div class="card"><div style="padding:12px 12px 8px"><h2>העונה</h2><div class="sub">' + st.w + ' ניצחונות, ' + st.d + ' תיקו, ' + st.l + ' הפסדים · שערים: ' + st.gf + ' בעד, ' + st.ga + ' נגד</div></div>' +
+      '<div class="filters" role="group" aria-label="סינון משחקים">' + [["all", "הכל (" + keys.length + ")"], ["next", "עתידיים (" + nNext + ")"], ["done", "שוחקו (" + nDone + ")"]].map(function (x) {
+        return '<button data-act="gfilter" data-v="' + x[0] + '" class="' + (gFilter === x[0] ? 'on' : '') + '" aria-pressed="' + (gFilter === x[0]) + '">' + x[1] + '</button>';
+      }).join('') + '</div></div>';
+    keys.filter(function (k) { return gFilter === "all" || (gFilter === "next" ? !isDone(data.games[k]) : isDone(data.games[k])); })
+      .forEach(function (k) { h += gameCard(k, nextKey); });
+    return h;
+  }
+  function rankList(kind) {
+    var st = gameStats();
+    var list = st.rows.map(function (r) { return { name: r.name, v: kind === "goals" ? r.g : kind === "reds" ? r.r : r.apps, apps: r.apps }; })
+      .filter(function (r) { return r.v > 0; });
+    list.sort(function (a, b) { return b.v - a.v || a.apps - b.apps || a.name.localeCompare(b.name, "he"); });
+    var prev = null, rank = 0;
+    list.forEach(function (x, i) { if (prev === null || x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
+    return { list: list, st: st };
+  }
+  function viewRank() {
+    var kinds = [["goals", "שערים"], ["reds", "הרחקות"], ["apps", "הופעות"]];
+    var h = '<div class="card"><div class="seg" role="group" aria-label="סוג דירוג">' + segBtns(kinds, gRank, "grank") + '</div>';
+    var o = rankList(gRank), list = o.list, st = o.st;
+    var title = gRank === "goals" ? "מלך השערים" : gRank === "reds" ? "דירוג הרחקות" : "הופעות במשחקים";
+    var total = gRank === "goals" ? st.goals : gRank === "reds" ? st.reds : st.done;
+    var unit = gRank === "goals" ? "שערים" : gRank === "reds" ? "הרחקות" : "משחקים";
+    h += '<div style="padding:0 12px 8px"><h2>' + title + '</h2><div class="sub">' + total + ' ' + unit + ' ב-' + st.done + ' משחקים שנרשמו</div></div>';
+    if (!list.length) return h + '<div class="empty">עוד אין נתונים.</div></div>';
+    var max = list[0].v;
+    h += '<div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>' + (gRank === "apps" ? "משחקים" : gRank === "goals" ? "שערים" : "הרחקות") + '</th>' +
+      (gRank === "apps" ? '<th>% מהמשחקים</th>' : '<th>משחקים</th><th>ממוצע</th>') + '</tr></thead><tbody>';
+    list.forEach(function (x) {
+      var cls = gRank === "goals" ? "" : gRank === "reds" ? "warn" : "cool";
+      var medal = gRank === "reds" ? '<span class="rk neutral">' + x.rank + '</span>' : rk(x.rank);
+      h += '<tr><td>' + medal + '</td><td class="name">' + esc(x.name) + '</td><td><span class="pct">' + x.v + '</span><div class="rbar"><i class="' + cls + '" style="width:' + Math.round((x.v / max) * 100) + '%"></i></div></td>' +
+        (gRank === "apps" ? '<td>' + Math.round((x.v / st.done) * 100) + '%</td>' : '<td>' + x.apps + '</td><td>' + (x.apps ? (x.v / x.apps).toFixed(1) : '–') + '</td>') + '</tr>';
     });
+    h += '</tbody></table></div><div class="legend">' + 'שחקנים שאינם רשומים לליגה לא נכללים.</div></div>';
     return h;
   }
 
@@ -343,7 +425,8 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
     var act = b.getAttribute("data-act"), v = b.getAttribute("data-v");
     if (act === "tab") tab = v; else if (act === "mode") { mode = v; anchor = latest(); }
     else if (act === "prev") shift(-1); else if (act === "next") shift(1);
-    else if (act === "gopen") gOpen = gOpen === v ? null : v;
+    else if (act === "gmore") gMore[v] = !gMore[v];
+    else if (act === "gsub") gSub = v; else if (act === "gfilter") gFilter = v; else if (act === "grank") gRank = v;
     else if (act === "tsub") tSub = v; else if (act === "tmode") resMode = v; else if (act === "tkey") rankKey = v;
     else if (act === "tplayer") openP = openP === v ? null : v;
     render();
