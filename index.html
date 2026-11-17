@@ -80,6 +80,10 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
 .pbtn { border: 0; background: transparent; font-weight: 700; text-align: right; padding: 0; }
 .histrow { display: grid; grid-template-columns: 1fr repeat(3, 70px); gap: 6px; padding: 6px 12px; font-size: 14px; text-align: center; background: var(--bg); }
 .histrow span:first-child { text-align: right; color: var(--muted); }
+.keybar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--muted); padding: 0 4px; }
+.keybar span { display: inline-flex; align-items: center; gap: 6px; }
+.keybar .cell { width: 22px; height: 22px; font-size: 12px; border-radius: 6px; }
+.keybar .keynote { flex-basis: 100%; }
 .foot { color: var(--muted); font-size: 12px; text-align: center; }
 .msg { padding: 14px; border-radius: 12px; background: var(--absent-bg); color: var(--absent); }
 </style>
@@ -172,13 +176,16 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
   function segBtns(items, current, act, attr) {
     return items.map(function (x) { return '<button data-act="' + act + '" data-v="' + x[0] + '" class="' + (current === x[0] ? 'on' : '') + '" aria-pressed="' + (current === x[0]) + '">' + x[1] + '</button>'; }).join('');
   }
+  function keyBar() {
+    return '<div class="keybar"><span>' + cellHtml('p') + 'הגיע בזמן</span><span>' + cellHtml('l') + 'איחר</span><span>' + cellHtml('a') + 'לא הגיע</span><span class="keynote">האימון מתחיל ב-20:10. הגעה אחריה נרשמת כאיחור.</span></div>';
+  }
   function viewReport() {
     var d = report(), rows = d.rows.slice();
     if (sortBy === "pct") rows.sort(function (x, y) {
       var px = x.pct == null ? -1 : x.pct, py = y.pct == null ? -1 : y.pct;
       return py - px || y.n - x.n || x.name.localeCompare(y.name, "he");
     });
-    var h = '<div class="card"><div class="seg" role="group" aria-label="סוג דוח">' + segBtns([["week", "שבועי"], ["month", "חודשי"], ["all", "כל התקופה"]], mode, "mode") + '</div>';
+    var h = keyBar() + '<div class="card"><div class="seg" role="group" aria-label="סוג דוח">' + segBtns([["week", "שבועי"], ["month", "חודשי"], ["all", "כל התקופה"]], mode, "mode") + '</div>';
     h += mode === "all" ? '<div class="pnav" style="grid-template-columns:1fr">' + esc(d.b.label) + '</div>'
       : '<div class="pnav"><button class="navbtn" data-act="next" aria-label="התקופה הבאה">›</button><div>' + esc(d.b.label) + '</div><button class="navbtn" data-act="prev" aria-label="התקופה הקודמת">‹</button></div>';
     h += '<div class="tiles"><div class="tile"><b>' + d.held.length + '</b><span>אימונים</span></div>' +
@@ -194,8 +201,8 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
       h += '<tr><td class="name">' + esc(r.name) + '</td><td>' + (r.pct == null ? '–' : '<span class="pct">' + r.pct + '%</span><div class="bar"><i class="' + cls + '" style="width:' + r.pct + '%"></i></div>') + '</td>' +
         r.cells.map(function (c) { return '<td>' + cellHtml(c) + '</td>'; }).join('') + '</tr>';
     });
-    return h + '</tbody></table></div><div class="legend"><span>' + cellHtml('p') + 'הגיע</span><span>' + cellHtml('l') + 'איחר</span><span>' + cellHtml('a') + 'לא הגיע</span><span>' + cellHtml('') + 'לא סומן</span></div>' +
-      '<div class="legend" style="border-top:0;padding-top:0">אחוז הנוכחות כולל איחורים, ונספר רק על אימונים שבהם השחקן סומן.</div></div>';
+    return h + '</tbody></table></div>' +
+      '<div class="legend">אחוז הנוכחות כולל איחורים, ונספר רק על אימונים שבהם השחקן סומן.</div></div>';
   }
 
   /* ---------- games ---------- */
