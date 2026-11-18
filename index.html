@@ -360,18 +360,19 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
   }
   function rankOverall() {
     var per = {};
-    TESTS.forEach(function (t) { rankEvent(t.key).forEach(function (x) { (per[x.id] || (per[x.id] = { name: x.name, ranks: {} })).ranks[t.key] = x.rank; }); });
+    var ev = TESTS.filter(function (t) { return rankEvent(t.key).length > 0; });
+    ev.forEach(function (t) { rankEvent(t.key).forEach(function (x) { (per[x.id] || (per[x.id] = { name: x.name, ranks: {} })).ranks[t.key] = x.rank; }); });
     var full = [], part = [];
     Object.keys(per).forEach(function (id) {
-      var o = per[id]; o.sum = TESTS.reduce(function (a, t) { return a + (o.ranks[t.key] || 0); }, 0);
-      o.missing = TESTS.filter(function (t) { return o.ranks[t.key] == null; });
+      var o = per[id]; o.sum = ev.reduce(function (a, t) { return a + (o.ranks[t.key] || 0); }, 0);
+      o.missing = ev.filter(function (t) { return o.ranks[t.key] == null; });
       (o.missing.length ? part : full).push(o);
     });
     full.sort(function (a, b) { return a.sum - b.sum || a.name.localeCompare(b.name, "he"); });
     var prev = null, rank = 0;
     full.forEach(function (x, i) { if (prev === null || x.sum !== prev) { rank = i + 1; prev = x.sum; } x.rank = rank; });
     part.sort(function (a, b) { return a.name.localeCompare(b.name, "he"); });
-    return { full: full, part: part };
+    return { full: full, part: part, ev: ev };
   }
   function rk(n) { return '<span class="rk' + (n <= 3 ? ' r' + n : '') + '">' + n + '</span>'; }
   function viewTests() {
@@ -395,8 +396,8 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
     if (rankKey === "overall") {
       var o = rankOverall();
       if (!o.full.length && !o.part.length) return h + '<div class="empty">אין תוצאות.</div></div>';
-      h += '<div class="sub" style="padding:0 12px 8px">הדירוג הכללי הוא סכום המקומות בשלושת המקצים. סכום נמוך יותר טוב יותר.</div><div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>100 מ׳</th><th>33 מ׳</th><th>זינוקים</th><th>סכום</th></tr></thead><tbody>';
-      o.full.forEach(function (x) { h += '<tr><td>' + rk(x.rank) + '</td><td class="name">' + esc(x.name) + '</td>' + TESTS.map(function (t) { return '<td>' + x.ranks[t.key] + '</td>'; }).join('') + '<td class="pct">' + x.sum + '</td></tr>'; });
+      h += '<div class="sub" style="padding:0 12px 8px">הדירוג הכללי הוא סכום המקומות במקצים שנמדדו (' + o.ev.map(function (t) { return t.label; }).join(', ') + '). סכום נמוך יותר טוב יותר.</div><div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th>' + o.ev.map(function (t) { return '<th>' + t.label + '</th>'; }).join('') + '<th>סכום</th></tr></thead><tbody>';
+      o.full.forEach(function (x) { h += '<tr><td>' + rk(x.rank) + '</td><td class="name">' + esc(x.name) + '</td>' + o.ev.map(function (t) { return '<td>' + x.ranks[t.key] + '</td>'; }).join('') + '<td class="pct">' + x.sum + '</td></tr>'; });
       h += '</tbody></table></div>';
       if (o.part.length) h += '<div class="legend">חסרה תוצאה, לא בדירוג הכללי: ' + o.part.map(function (x) { return esc(x.name); }).join(', ') + '</div>';
       return h + '</div>';
