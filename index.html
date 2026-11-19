@@ -78,6 +78,12 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
 .evhead { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); } .evrow { border-top: 1px solid var(--line); }
 .evhead span:first-child, .evrow span:first-child { text-align: right; } .evrow span:first-child { font-weight: 700; }
 .pbtn { border: 0; background: transparent; font-weight: 700; text-align: right; padding: 0; }
+.trend { padding: 8px 12px 12px; background: var(--bg); text-align: right; }
+.trend h4 { margin: 0 0 6px; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.beta { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: #fff3d6; color: #8a5a00; }
+.trend .tl { margin: 8px 0 2px; font-size: 13px; font-weight: 600; }
+.trend .tn { font-size: 12px; color: var(--muted); }
+.trend svg { width: 100%; height: 70px; display: block; direction: ltr; }
 .histrow { display: grid; grid-template-columns: 1fr repeat(3, 70px); gap: 6px; padding: 6px 12px; font-size: 14px; text-align: center; background: var(--bg); }
 .histrow span:first-child { text-align: right; color: var(--muted); }
 .keybar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--muted); padding: 0 4px; }
@@ -375,6 +381,27 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
     return { full: full, part: part, ev: ev };
   }
   function rk(n) { return '<span class="rk' + (n <= 3 ? ' r' + n : '') + '">' + n + '</span>'; }
+  function trendHtml(pid, getR) {
+    var ds = Object.keys(data.fitness).sort();
+    var out = '<div class="trend"><h4>מגמה לאורך זמן <span class="beta">Beta</span></h4>';
+    var any = false;
+    TESTS.forEach(function (t) {
+      var pts = [];
+      ds.forEach(function (d) { var r = getR(d); r = (r && r[pid]) || {}; if (r[t.key] != null) pts.push({ d: d, v: r[t.key] }); });
+      if (!pts.length) return;
+      any = true;
+      out += '<div class="tl">' + t.label + '</div>';
+      if (pts.length < 2) { out += '<div class="tn">מדידה אחת (' + fmt(pts[0].d) + ': ' + fmtVal(t, pts[0].v) + '). המגמה תופיע אחרי מדידה שנייה.</div>'; return; }
+      var vs = pts.map(function (x) { return x.v; }), mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs), W = 300, H = 70, pad = 10;
+      var xy = pts.map(function (x, i) { return [pad + i * (W - 2 * pad) / (pts.length - 1), mx === mn ? H / 2 : (t.type === "time" ? pad + (x.v - mn) / (mx - mn) * (H - 2 * pad) : H - pad - (x.v - mn) / (mx - mn) * (H - 2 * pad))]; });
+      out += '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="מגמה ' + t.label + '"><polyline fill="none" stroke="currentColor" stroke-width="2" points="' + xy.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join(' ') + '"/>' +
+        xy.map(function (q) { return '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.5" fill="currentColor"/>'; }).join('') + '</svg>';
+      var first = pts[0].v, last = pts[pts.length - 1].v, better = t.type === "time" ? last < first : last > first;
+      out += '<div class="tn">' + 'מ-' + fmtVal(t, first) + ' (' + fmt(pts[0].d) + ') ל-' + fmtVal(t, last) + ' (' + fmt(pts[pts.length - 1].d) + ')' + (last === first ? ' · ללא שינוי' : better ? ' · שיפור' : ' · החמרה') + '</div>';
+    });
+    if (!any) out += '<div class="tn">אין עדיין מדידות.</div>';
+    return out + '</div>';
+  }
   function viewTests() {
     var dates = Object.keys(data.fitness).sort();
     var h = '<div class="card"><div class="seg two" role="group">' + segBtns([["players", "לפי שחקן"], ["rank", "דירוג"]], tSub, "tsub") + '</div></div>';
@@ -388,7 +415,7 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
         if (openP === p.id) h += '<tr><td colspan="4" style="padding:0;border-top:0">' + dates.slice().reverse().map(function (d) {
           var r = ((data.fitness[d].results || {})[p.id]) || {};
           return '<div class="histrow"><span>' + fmt(d) + '</span>' + TESTS.map(function (t) { return '<span>' + fmtVal(t, r[t.key]) + '</span>'; }).join('') + '</div>';
-        }).join('') + '</td></tr>';
+        }).join('') + trendHtml(p.id, function (d) { return data.fitness[d].results || {}; }) + '</td></tr>';
       });
       return h + '</tbody></table></div><div class="legend">לחיצה על שם שחקן מציגה את כל התוצאות שלו לפי תאריך.</div></div>';
     }
