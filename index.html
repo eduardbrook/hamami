@@ -245,20 +245,73 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
   function whenText(d) { var n = daysUntil(d); return n < 0 ? "ממתין לתוצאה" : n === 0 ? "היום" : n === 1 ? "מחר" : "בעוד " + n + " ימים"; }
   function nameOf(pid) { return data.players[pid] ? data.players[pid].name : pid; }
   function gameStats() {
-    var rows = {}, done = 0, gf = 0, ga = 0, w = 0, dr = 0, l = 0, goals = 0, reds = 0;
-    players(true).forEach(function (p) { rows[p.id] = { id: p.id, name: p.name, apps: 0, g: 0, r: 0 }; });
+    var rows = {}, done = 0, gf = 0, ga = 0, w = 0, dr = 0, l = 0, goals = 0, reds = 0, det = 0, tot = { a: 0, st: 0, xd: 0 };
+    players(true).forEach(function (p) { rows[p.id] = { id: p.id, name: p.name, apps: 0, dapps: 0, g: 0, r: 0, a: 0, st: 0, xd: 0 }; });
     Object.keys(data.games).forEach(function (d) {
       var g = data.games[d]; if (!isDone(g)) return;
-      done++; gf += g.us; ga += g.them;
+      done++; gf += g.us; ga += g.them; if (g.stats) det++;
       var r = resultOf(g); if (r === "ניצחון") w++; else if (r === "תיקו") dr++; else l++;
       (g.played || []).forEach(function (pid) {
         if (!data.players[pid]) return;
-        var row = rows[pid] || (rows[pid] = { id: pid, name: nameOf(pid), apps: 0, g: 0, r: 0 });
+        var row = rows[pid] || (rows[pid] = { id: pid, name: nameOf(pid), apps: 0, dapps: 0, g: 0, r: 0, a: 0, st: 0, xd: 0 });
         var e = (g.events || {})[pid] || {};
         row.apps++; row.g += e.g || 0; row.r += e.r || 0; goals += e.g || 0; reds += e.r || 0;
+        if (g.stats) { var x = g.stats[pid] || {}; row.dapps++; ['a', 'st', 'xd'].forEach(function (k) { row[k] += x[k] || 0; tot[k] += x[k] || 0; }); }
       });
     });
-    return { rows: Object.keys(rows).map(function (k) { return rows[k]; }), done: done, gf: gf, ga: ga, w: w, d: dr, l: l, goals: goals, reds: reds };
+    return { rows: Object.keys(rows).map(function (k) { return rows[k]; }), done: done, gf: gf, ga: ga, w: w, d: dr, l: l, goals: goals, reds: reds, det: det, tot: tot };
+  }
+  function pct(a, b) { return b ? Math.round(a / b * 100) + '%' : '–'; }
+  function sumQ(g, k) { return (g.qstats || []).reduce(function (t, q) { return t + (q[k] || 0); }, 0); }
+  function gameExtra(g) {
+    var qs = g.qstats || [], h = '<div class="dnote" style="font-weight:700">רבעים: ' + g.q.map(function (x) { return x[0] + '–' + x[1]; }).join(' · ') + '</div>';
+    var run = [0, 0], cum = g.q.map(function (x) { run[0] += x[0]; run[1] += x[1]; return run[0] + '–' + run[1]; });
+    h += '<div class="dnote">מצב אחרי כל רבע: ' + cum.join(' · ') + '</div>';
+    if (qs.length) {
+      var rows = [
+        ['תוצאה', function (i) { return g.q[i][0] + '–' + g.q[i][1]; }],
+        ['זריקות (שער/סה״כ)', function (i) { var q = qs[i], t = (q.g || 0) + (q.m || 0); return (q.g || 0) + '/' + t + ' (' + pct(q.g || 0, t) + ')'; }],
+        ['הצלות שוער', function (i) { return qs[i].sv || 0; }],
+        ['הרחקות שלנו', function (i) { return qs[i].r || 0; }],
+        ['הרחקות יריב', function (i) { return qs[i].xd || 0; }],
+        ['חטיפות', function (i) { return qs[i].st || 0; }],
+        ['איבודי כדור', function (i) { return qs[i].to || 0; }],
+        ['בישולים', function (i) { return qs[i].a || 0; }]
+      ];
+      h += '<div class="tablewrap"><table><thead><tr><th class="name">רבע</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead><tbody>';
+      rows.forEach(function (r) { h += '<tr><td class="name">' + r[0] + '</td>' + [0, 1, 2, 3].map(function (i) { return '<td>' + r[1](i) + '</td>'; }).join('') + '</tr>'; });
+      h += '</tbody></table></div>';
+      var shots = sumQ(g, 'g') + sumQ(g, 'm');
+      h += '<div class="dnote">סה״כ: ' + sumQ(g, 'g') + ' שערים מתוך ' + shots + ' זריקות (' + pct(sumQ(g, 'g'), shots) + ') · ' + sumQ(g, 'a') + ' בישולים · ' + sumQ(g, 'st') + ' חטיפות · ' + sumQ(g, 'bl') + ' בלוקים · ' + sumQ(g, 'cd') + ' סגירות מתפרצת · פנדלים לטובתנו ' + sumQ(g, 'pd') + ', נגדנו ' + sumQ(g, 'pc') + '</div>';
+    }
+    if (g.gk) {
+      h += '<div class="evhead"><span>שוער</span><span>הצלות</span><span>ספגנו</span></div>';
+      Object.keys(g.gk).forEach(function (pid) {
+        var qq = g.gk[pid], conc = 0; qq.forEach(function (n) { conc += g.q[n - 1][1]; });
+        var sv = ((g.stats || {})[pid] || {}).sv || 0;
+        h += '<div class="evrow"><span>' + esc(nameOf(pid)) + ' <span class="zero">(רבעים ' + qq.join('–') + ', ' + pct(sv, sv + conc) + ')</span></span><span><b class="cnt">' + sv + '</b></span><span><b class="cnt red">' + conc + '</b></span></div>';
+      });
+    }
+    if (g.oppGoals) {
+      h += '<div class="dnote">שערים שספגנו לפי מספר יריב: ' + Object.keys(g.oppGoals).sort(function (a, b) { return g.oppGoals[b] - g.oppGoals[a]; }).map(function (k) { return '#' + k + ' (' + g.oppGoals[k] + ')'; }).join(', ') + '</div>';
+    }
+    return h;
+  }
+  function playerTable(g) {
+    var cols = [['g', 'שערים'], ['sh', 'זריקות'], ['a', 'בישולים'], ['st', 'חטיפות'], ['bl', 'בלוקים'], ['cd', 'סגר מתפרצת'], ['xd', 'גרם להרחקה'], ['pd', 'פנדל שהשיג'], ['to', 'איבודים'], ['r', 'הורחק']];
+    var list = (g.played || []).map(function (pid) {
+      var e = (g.events || {})[pid] || {}, x = (g.stats || {})[pid] || {};
+      return { name: nameOf(pid), g: e.g || 0, r: e.r || 0, a: x.a || 0, st: x.st || 0, bl: x.bl || 0, cd: x.cd || 0, xd: x.xd || 0, pd: x.pd || 0, to: x.to || 0, m: x.m || 0, sv: x.sv || 0 };
+    });
+    list.forEach(function (x) { x.sh = x.g + x.m ? x.g + '/' + (x.g + x.m) : '–'; });
+    list.sort(function (a, b) { return b.g - a.g || b.a - a.a || a.name.localeCompare(b.name, 'he'); });
+    var h = '<div class="tablewrap"><table><thead><tr><th class="name">שחקן</th>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>';
+    list.forEach(function (x) {
+      h += '<tr><td class="name">' + esc(x.name) + (x.sv ? ' <span class="zero">(שוער)</span>' : '') + '</td>' + cols.map(function (c) {
+        var v = x[c[0]]; return '<td>' + (v ? v : '<span class="zero">–</span>') + '</td>';
+      }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div><div class="legend">הנתונים נרשמו ידנית בזמן המשחק. איבוד כדור/זריקה שלא נכנסה ללא שם לא משויכים לשחקן.</div>';
   }
   function gameCard(d, nextKey) {
     var g = data.games[d], done = isDone(g), open = !!gMore[d], res = resultOf(g);
@@ -276,14 +329,18 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
       h += '<div class="detail">';
       if (!done) h += '<div class="dnote">המשחק עוד לא התקיים. אחרי המשחק יופיעו כאן התוצאה, השערים וההרחקות.</div>';
       else {
+        if (g.q) h += gameExtra(g);
         var list = (g.played || []).map(function (pid) { var e = (g.events || {})[pid] || {}; return { name: nameOf(pid), g: e.g || 0, r: e.r || 0 }; })
           .sort(function (a, b) { return b.g - a.g || b.r - a.r || a.name.localeCompare(b.name, "he"); });
         if (!list.length) h += '<div class="dnote">עוד לא נרשם הרכב למשחק.</div>';
         else {
+          if (g.stats) h += playerTable(g);
+          else {
           h += '<div class="evhead"><span>שחקן</span><span>שערים</span><span>הרחקות</span></div>';
           list.forEach(function (x) {
             h += '<div class="evrow"><span>' + esc(x.name) + '</span><span>' + (x.g ? '<b class="cnt">' + x.g + '</b>' : '<span class="zero">–</span>') + '</span><span>' + (x.r ? '<b class="cnt red">' + x.r + '</b>' : '<span class="zero">–</span>') + '</span></div>';
           });
+          }
         }
       }
       h += '</div>';
@@ -305,9 +362,11 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
       .forEach(function (k) { h += gameCard(k, nextKey); });
     return h;
   }
+  var RK = { goals: { f: 'g', t: 'מלך השערים', u: 'שערים', h: 'שערים' }, ast: { f: 'a', t: 'מלך הבישולים', u: 'בישולים', h: 'בישולים' }, stl: { f: 'st', t: 'חטיפות', u: 'חטיפות', h: 'חטיפות' }, xdr: { f: 'xd', t: 'גרמו להרחקת יריב', u: 'הרחקות יריב', h: 'הרחקות יריב' }, reds: { f: 'r', t: 'דירוג הרחקות', u: 'הרחקות', h: 'הרחקות' }, apps: { f: 'apps', t: 'הופעות במשחקים', u: 'משחקים', h: 'משחקים' } };
   function rankList(kind) {
     var st = gameStats();
-    var list = st.rows.map(function (r) { return { name: r.name, v: kind === "goals" ? r.g : kind === "reds" ? r.r : r.apps, apps: r.apps }; })
+    var f = RK[kind].f, ex = kind === "ast" || kind === "stl" || kind === "xdr";
+    var list = st.rows.map(function (r) { return { name: r.name, v: r[f], apps: ex ? r.dapps : r.apps }; })
       .filter(function (r) { return r.v > 0; });
     list.sort(function (a, b) { return b.v - a.v || a.apps - b.apps || a.name.localeCompare(b.name, "he"); });
     var prev = null, rank = 0;
@@ -315,16 +374,16 @@ td.name, th.name { text-align: right; padding-right: 12px; font-weight: 700; pos
     return { list: list, st: st };
   }
   function viewRank() {
-    var kinds = [["goals", "שערים"], ["reds", "הרחקות"], ["apps", "הופעות"]];
+    var kinds = [["goals", "שערים"], ["ast", "בישולים"], ["stl", "חטיפות"], ["xdr", "גרמו להרחקה"], ["reds", "הרחקות"], ["apps", "הופעות"]];
     var h = '<div class="card"><div class="seg" role="group" aria-label="סוג דירוג">' + segBtns(kinds, gRank, "grank") + '</div>';
     var o = rankList(gRank), list = o.list, st = o.st;
-    var title = gRank === "goals" ? "מלך השערים" : gRank === "reds" ? "דירוג הרחקות" : "הופעות במשחקים";
-    var total = gRank === "goals" ? st.goals : gRank === "reds" ? st.reds : st.done;
-    var unit = gRank === "goals" ? "שערים" : gRank === "reds" ? "הרחקות" : "משחקים";
-    h += '<div style="padding:0 12px 8px"><h2>' + title + '</h2><div class="sub">' + total + ' ' + unit + ' ב-' + st.done + ' משחקים שנרשמו</div></div>';
+    var ex = gRank === "ast" || gRank === "stl" || gRank === "xdr", title = RK[gRank].t;
+    var total = gRank === "goals" ? st.goals : gRank === "reds" ? st.reds : gRank === "apps" ? st.done : st.tot[RK[gRank].f];
+    var unit = RK[gRank].u, nGames = ex ? st.det : st.done;
+    h += '<div style="padding:0 12px 8px"><h2>' + title + '</h2><div class="sub">' + total + ' ' + unit + ' ב-' + nGames + ' משחקים שנרשמו</div></div>';
     if (!list.length) return h + '<div class="empty">עוד אין נתונים.</div></div>';
     var max = list[0].v;
-    h += '<div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>' + (gRank === "apps" ? "משחקים" : gRank === "goals" ? "שערים" : "הרחקות") + '</th>' +
+    h += '<div class="tablewrap"><table><thead><tr><th>מקום</th><th class="name">שחקן</th><th>' + RK[gRank].h + '</th>' +
       (gRank === "apps" ? '<th>% מהמשחקים</th>' : '<th>משחקים</th><th>ממוצע</th>') + '</tr></thead><tbody>';
     list.forEach(function (x) {
       var cls = gRank === "goals" ? "" : gRank === "reds" ? "warn" : "cool";
